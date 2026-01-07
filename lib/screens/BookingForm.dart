@@ -6,6 +6,7 @@ import '../models/service.dart';
 import '../models/booking.dart';
 import '../models/customerwallet.dart';
 import '../services/api_service.dart';
+import '../services/shared_preferences_service.dart';
 import 'paymentscreen.dart';
 
 class BookingForm extends StatefulWidget {
@@ -187,6 +188,9 @@ class _BookingFormState extends State<BookingForm> {
                               await ApiService.createBooking(newBooking);
 
                           if (result['status'] == true) {
+                            // Get customer ID from shared preferences
+                            final customerId = await SharedPreferencesService.getCustomerId() ?? 0;
+                            
                             Navigator.pop(context, true);
                             Navigator.push(
                               context,
@@ -195,7 +199,7 @@ class _BookingFormState extends State<BookingForm> {
                                   serviceName: widget.service!.name,
                                   price: widget.service!.price,
                                   wallet: widget.wallet,
-                                  customerId: 1, // replace with actual
+                                  customerId: customerId,
                                   serviceId: widget.service!.id,
                                 ),
                               ),

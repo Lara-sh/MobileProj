@@ -52,9 +52,23 @@ class _WalletScreenState extends State<WalletScreen> {
         wallet!.addMoney(amount);
       });
 
-      // Update in SQL via API
+      // Update wallet in SQL via API with card details if provided
       try {
-        await ApiService.updateWallet(widget.customerEmail, wallet!.balance);
+        await ApiService.updateWallet(
+          widget.customerEmail,
+          wallet!.balance,
+          cardNumber: cardNumber.isNotEmpty ? cardNumber : null,
+          cardHolder: cardHolder.isNotEmpty ? cardHolder : null,
+          expiryDate: expiryDate.isNotEmpty ? expiryDate : null,
+          cvv: cvv.isNotEmpty ? cvv : null,
+        );
+        
+        // Update local wallet object with card details
+        if (cardNumber.isNotEmpty) wallet!.cardNumber = cardNumber;
+        if (cardHolder.isNotEmpty) wallet!.cardHolder = cardHolder;
+        if (expiryDate.isNotEmpty) wallet!.expiryDate = expiryDate;
+        if (cvv.isNotEmpty) wallet!.cvv = cvv;
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -62,6 +76,9 @@ class _WalletScreenState extends State<WalletScreen> {
             ),
           ),
         );
+        
+        // Reload wallet to get latest from database
+        await _loadWallet();
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Failed to update wallet: $e")),
@@ -98,38 +115,38 @@ class _WalletScreenState extends State<WalletScreen> {
               ),
               const SizedBox(height: AppStyles.xlargeSpacing),
               TextFormField(
-                initialValue: wallet!.cardNumber,
+                initialValue: wallet!.cardNumber.isNotEmpty ? wallet!.cardNumber : '',
                 decoration: AppStyles.filledInputDecoration.copyWith(labelText: "Card Number"),
                 keyboardType: TextInputType.number,
-                onSaved: (val) => cardNumber = val!,
-                validator: (val) => val!.isEmpty ? "Enter card number" : null,
+                onSaved: (val) => cardNumber = val ?? '',
+                validator: null, // Card number is optional
               ),
               const SizedBox(height: AppStyles.mediumSpacing),
               TextFormField(
-                initialValue: wallet!.cardHolder,
+                initialValue: wallet!.cardHolder.isNotEmpty ? wallet!.cardHolder : '',
                 decoration: AppStyles.filledInputDecoration.copyWith(labelText: "Card Holder Name"),
-                onSaved: (val) => cardHolder = val!,
-                validator: (val) => val!.isEmpty ? "Enter card holder name" : null,
+                onSaved: (val) => cardHolder = val ?? '',
+                validator: null, // Card holder is optional
               ),
               const SizedBox(height: AppStyles.mediumSpacing),
               Row(
                 children: [
                   Expanded(
                     child: TextFormField(
-                      initialValue: wallet!.expiryDate,
+                      initialValue: wallet!.expiryDate.isNotEmpty ? wallet!.expiryDate : '',
                       decoration: AppStyles.filledInputDecoration.copyWith(labelText: "Expiry Date (MM/YY)"),
-                      onSaved: (val) => expiryDate = val!,
-                      validator: (val) => val!.isEmpty ? "Enter expiry date" : null,
+                      onSaved: (val) => expiryDate = val ?? '',
+                      validator: null, // Expiry date is optional
                     ),
                   ),
                   const SizedBox(width: AppStyles.smallSpacing),
                   Expanded(
                     child: TextFormField(
-                      initialValue: wallet!.cvv,
+                      initialValue: wallet!.cvv.isNotEmpty ? wallet!.cvv : '',
                       decoration: AppStyles.filledInputDecoration.copyWith(labelText: "CVV"),
                       keyboardType: TextInputType.number,
-                      onSaved: (val) => cvv = val!,
-                      validator: (val) => val!.isEmpty ? "Enter CVV" : null,
+                      onSaved: (val) => cvv = val ?? '',
+                      validator: null, // CVV is optional
                     ),
                   ),
                 ],

@@ -3,6 +3,7 @@ import '../styles/app_styles.dart';
 import '../models/service.dart';
 import '../models/customerwallet.dart';
 import '../services/api_service.dart';
+import '../services/shared_preferences_service.dart';
 import 'service_details_screen.dart';
 
 class CustomerMainScreen extends StatefulWidget {
@@ -17,11 +18,46 @@ class CustomerMainScreen extends StatefulWidget {
 
 class _CustomerMainScreenState extends State<CustomerMainScreen> {
   late Future<List<Service>> servicesFuture;
+  CustomerWallet? _wallet;
+  String? _customerEmail;
 
   @override
   void initState() {
     super.initState();
     servicesFuture = ApiService.getServices();
+    _wallet = widget.wallet;
+    _customerEmail = widget.customerEmail;
+    
+    // If wallet is null but we have email, try to load it
+    if (_wallet == null && _customerEmail != null && _customerEmail!.isNotEmpty) {
+      _loadWallet();
+    } else if (_customerEmail == null || _customerEmail!.isEmpty) {
+      // Try to get email from shared preferences
+      _loadCustomerEmail();
+    }
+  }
+
+  Future<void> _loadCustomerEmail() async {
+    final email = await SharedPreferencesService.getCustomerEmail();
+    setState(() {
+      _customerEmail = email;
+    });
+    if (_customerEmail != null && _customerEmail!.isNotEmpty && _wallet == null) {
+      _loadWallet();
+    }
+  }
+
+  Future<void> _loadWallet() async {
+    if (_customerEmail == null || _customerEmail!.isEmpty) return;
+    
+    try {
+      final loadedWallet = await ApiService.getWallet(_customerEmail!);
+      setState(() {
+        _wallet = loadedWallet;
+      });
+    } catch (e) {
+      // Wallet loading failed, keep _wallet as null
+    }
   }
 
   @override
@@ -95,23 +131,42 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
                         alignment: Alignment.centerRight,
                         child: TextButton(
                           onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    ServiceDetailsScreen(
-                                      service: service,
-                                      wallet: widget.wallet ?? CustomerWallet(
-                                        cardNumber: "1111222233334444",
-                                        cardHolder: "Customer",
-                                        expiryDate: "12/28",
-                                        cvv: "123",
-                                        balance: 100.0,
+                            if (_wallet == null && _customerEmail != null && _customerEmail!.isNotEmpty) {
+                              // Try to load wallet if not available
+                              _loadWallet().then((_) {
+                                if (_wallet != null && mounted) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ServiceDetailsScreen(
+                                        service: service,
+                                        wallet: _wallet!,
+                                        customerEmail: _customerEmail!,
                                       ),
-                                      customerEmail: widget.customerEmail ?? '',
                                     ),
-                              ),
-                            );
+                                  );
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text("Please wait while wallet is loading...")),
+                                  );
+                                }
+                              });
+                            } else if (_wallet != null && _customerEmail != null) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ServiceDetailsScreen(
+                                    service: service,
+                                    wallet: _wallet!,
+                                    customerEmail: _customerEmail!,
+                                  ),
+                                ),
+                              );
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Customer information not available")),
+                              );
+                            }
                           },
                           child: const Text("View Details"),
                         ),

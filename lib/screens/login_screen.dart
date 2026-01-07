@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import '../styles/app_styles.dart';
 import '../services/api_service.dart';
+import '../services/shared_preferences_service.dart';
 import 'signup_screen.dart';
 import 'CustomerNavigationScreen.dart';
 
@@ -72,6 +73,26 @@ class _LoginScreenState extends State<LoginScreen> {
                         );
 
                         if (res['status'] == true) {
+                          // Save user data to shared preferences
+                          await SharedPreferencesService.saveCustomerEmail(email);
+                          await SharedPreferencesService.saveUserRole(res['role'] ?? '');
+                          await SharedPreferencesService.setLoggedIn(true);
+                          
+                          // Save customer ID if available from login response
+                          if (res['customerId'] != null) {
+                            await SharedPreferencesService.saveCustomerId(res['customerId']);
+                          } else if (res['role'] == 'customer') {
+                            // Try to get customer ID from wallet if not in login response
+                            try {
+                              final wallet = await ApiService.getWallet(email);
+                              if (wallet.userId != null) {
+                                await SharedPreferencesService.saveCustomerId(wallet.userId!);
+                              }
+                            } catch (e) {
+                              // Failed to load wallet, continue without customer ID
+                            }
+                          }
+
                           if (res['role'] == 'customer') {
                             // Navigate to CustomerNavigationScreen
                             Navigator.pushReplacement(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../styles/app_styles.dart';
 import '../models/booking.dart';
 import '../models/customerwallet.dart';
+import '../models/service.dart';
 import '../services/api_service.dart';
 import 'BookingForm.dart';
 
@@ -17,26 +18,78 @@ class CurrentServicesScreen extends StatefulWidget {
 
 class _CurrentServicesScreenState extends State<CurrentServicesScreen> {
   late Future<List<Booking>> bookingsFuture;
+  late Future<List<Service>> servicesFuture;
 
   @override
   void initState() {
     super.initState();
     _loadBookings();
+    servicesFuture = ApiService.getServices();
   }
 
   void _loadBookings() {
     bookingsFuture = ApiService.getCustomerBookings(widget.customerEmail);
   }
 
-  Future<void> _cancelBooking(int id) async {
-    final result = await ApiService.cancelBooking(id);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(result['message'] ?? "Booking canceled")),
-    );
-
-    setState(_loadBookings);
+  Future<double?> _getServicePrice(String serviceName) async {
+    try {
+      final services = await servicesFuture;
+      final service = services.firstWhere(
+        (s) => s.name == serviceName,
+        orElse: () => Service(
+          id: 0,
+          name: '',
+          price: 0.0,
+          image: '',
+          description: '',
+        ),
+      );
+      return service.price > 0 ? service.price : null;
+    } catch (e) {
+      return null;
+    }
   }
+
+  Future<void> _cancelBooking(int id, String serviceName) async {
+    // Get service price for refund
+    final servicePrice = await _getServicePrice(serviceName);
+    
+    if (servicePrice == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Could not determine service price for refund")),
+      );
+      return;
+    }
+
+    try {
+      // Cancel the booking
+      final result = await ApiService.cancelBooking(id, widget.customerEmail, servicePrice);
+
+      // Explicitly refund money to wallet to ensure it's updated in database
+      try {
+        await ApiService.refundToWallet(widget.customerEmail, servicePrice);
+      } catch (refundError) {
+        // If explicit refund fails, log but don't block - backend might have already handled it
+        print("Warning: Explicit refund failed: $refundError");
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result['message'] ?? "Booking canceled. Refund of \$${servicePrice.toStringAsFixed(2)} has been processed.",
+          ),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+      setState(_loadBookings);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error canceling booking: $e")),
+      );
+    }
+  }
+
 
   Future<void> _updateBooking(Booking booking) async {
     final updated = await Navigator.push<bool>(
@@ -105,7 +158,7 @@ class _CurrentServicesScreenState extends State<CurrentServicesScreen> {
                             child: const Text("Update"),
                           ),
                           TextButton(
-                            onPressed: () => _cancelBooking(booking.id!),
+                            onPressed: () => _cancelBooking(booking.id!, booking.serviceName),
                             child: const Text(
                               "Cancel",
                               style: TextStyle(color: Colors.red),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../styles/app_styles.dart';
 import '../services/api_service.dart';
+import '../services/shared_preferences_service.dart';
+import 'CustomerNavigationScreen.dart';
 
 class SignupScreen extends StatefulWidget {
   final String role;
@@ -23,7 +25,7 @@ class _SignupScreenState extends State<SignupScreen> {
   @override
   void initState() {
     super.initState();
-    role = widget.role; 
+    role = widget.role;
   }
 
   @override
@@ -41,6 +43,8 @@ class _SignupScreenState extends State<SignupScreen> {
           child: ListView(
             children: [
               const SizedBox(height: AppStyles.smallSpacing),
+
+              /// NAME
               TextFormField(
                 decoration: AppStyles.standardInputDecoration.copyWith(
                   labelText: "Name",
@@ -49,7 +53,10 @@ class _SignupScreenState extends State<SignupScreen> {
                 validator: (val) =>
                     val!.isEmpty ? "Please enter your name" : null,
               ),
+
               const SizedBox(height: AppStyles.mediumSpacing),
+
+              /// EMAIL
               TextFormField(
                 decoration: AppStyles.standardInputDecoration.copyWith(
                   labelText: "Email",
@@ -59,7 +66,10 @@ class _SignupScreenState extends State<SignupScreen> {
                 validator: (val) =>
                     val!.isEmpty ? "Please enter your email" : null,
               ),
+
               const SizedBox(height: AppStyles.mediumSpacing),
+
+              /// PASSWORD
               TextFormField(
                 decoration: AppStyles.standardInputDecoration.copyWith(
                   labelText: "Password",
@@ -69,7 +79,10 @@ class _SignupScreenState extends State<SignupScreen> {
                 validator: (val) =>
                     val!.isEmpty ? "Please enter your password" : null,
               ),
+
               const SizedBox(height: AppStyles.mediumSpacing),
+
+              /// PHONE
               TextFormField(
                 decoration: AppStyles.standardInputDecoration.copyWith(
                   labelText: "Phone",
@@ -77,7 +90,10 @@ class _SignupScreenState extends State<SignupScreen> {
                 keyboardType: TextInputType.phone,
                 onSaved: (val) => phone = val!,
               ),
+
               const SizedBox(height: AppStyles.largeSpacing),
+
+              /// ROLE BOX
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: AppStyles.roleBoxDecoration,
@@ -86,7 +102,10 @@ class _SignupScreenState extends State<SignupScreen> {
                   style: AppStyles.roleTextStyle,
                 ),
               ),
+
               const SizedBox(height: AppStyles.xlargeSpacing),
+
+              /// CREATE ACCOUNT BUTTON
               ElevatedButton(
                 style: AppStyles.accentButtonStyle,
                 child: const Text(
@@ -94,24 +113,68 @@ class _SignupScreenState extends State<SignupScreen> {
                   style: AppStyles.buttonTextStyle16,
                 ),
                 onPressed: () async {
-                  if (_formKey.currentState!.validate()) {
-                    _formKey.currentState!.save();
+                  if (!_formKey.currentState!.validate()) return;
 
-                    final res = await ApiService.signup(
-                      name,
-                      email,
-                      password,
-                      role,
-                      phone,
-                    );
+                  _formKey.currentState!.save();
 
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(res['message'])),
-                    );
+                  final res = await ApiService.signup(
+                    name,
+                    email,
+                    password,
+                    role,
+                    phone,
+                  );
 
-                    if (res['status']) {
-                      Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(res['message'])),
+                  );
+
+                  if (!res['status']) return;
+
+                  /// SAVE BASIC USER DATA
+                  await SharedPreferencesService.saveCustomerEmail(email);
+                  await SharedPreferencesService.saveUserRole(role);
+                  await SharedPreferencesService.setLoggedIn(true);
+
+                  /// GET CUSTOMER ID SAFELY
+                  int? customerId;
+                  if (res['customerId'] != null) {
+                    customerId = res['customerId'] is int
+                        ? res['customerId']
+                        : int.tryParse(res['customerId'].toString());
+
+                    if (customerId != null) {
+                      await SharedPreferencesService.saveCustomerId(customerId);
                     }
+                  }
+
+                  /// CREATE WALLET AUTOMATICALLY (balance = 0)
+                  /// card_number, card_holder, expiry_date, cvv => NULL
+                  if (role.toLowerCase() == 'customer') {
+                    try {
+                      await ApiService.createWallet(
+                        email,
+                        userId: customerId,
+                      );
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content:
+                              Text("Warning: Wallet creation failed"),
+                        ),
+                      );
+                    }
+
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CustomerNavigationScreen(
+                          customerEmail: email,
+                        ),
+                      ),
+                    );
+                  } else {
+                    Navigator.pop(context);
                   }
                 },
               ),

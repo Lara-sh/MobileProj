@@ -20,18 +20,24 @@ class ApiService {
     String email,
     String password,
     String role,
-    String phone,
-  ) async {
+    String phone, {
+    String? carNumber,
+    String? carColor,
+  }) async {
+    final body = {
+      "name": name,
+      "email": email,
+      "password": password,
+      "role": role,
+      "phone": phone,
+      if (carNumber != null && carNumber.isNotEmpty) "car_number": carNumber,
+      if (carColor != null && carColor.isNotEmpty) "car_color": carColor,
+    };
+
     final response = await http.post(
       Uri.parse("$baseUrl/signup.php"),
       headers: headers,
-      body: jsonEncode({
-        "name": name,
-        "email": email,
-        "password": password,
-        "role": role,
-        "phone": phone,
-      }),
+      body: jsonEncode(body),
     );
 
     return jsonDecode(response.body);
@@ -125,19 +131,46 @@ class ApiService {
   /// ❌ Cancel Booking
   static Future<Map<String, dynamic>> cancelBooking(
     int bookingId,
-  ) async {
-    final response = await http.post(
-      Uri.parse("$baseUrl/cancel_booking.php"),
-      headers: headers,
-      body: jsonEncode({
-        "id": bookingId,
-      }),
-    );
+    String customerEmail,
+    double refundAmount,
+) async {
+  final response = await http.post(
+    Uri.parse("$baseUrl/cancel_service.php"),
+    headers: headers,
+    body: jsonEncode({
+      "id": bookingId,
+      "customer_email": customerEmail,
+      "refund_amount": refundAmount,
+    }),
+  );
 
-    return jsonDecode(response.body);
-  }
+  return jsonDecode(response.body);
+}
+
 
   /* ===================== WALLET ===================== */
+
+  /// Create wallet for new user
+  /// Creates a wallet with balance = 0 and all card details as NULL
+  static Future<void> createWallet(
+  String email, {
+  int? userId,
+}) async {
+  final response = await http.post(
+    Uri.parse("$baseUrl/create_wallet.php"),
+    body: {
+      'email': email,
+      if (userId != null) 'user_id': userId.toString(),
+    },
+  );
+
+  final data = jsonDecode(response.body);
+
+  if (!data['status']) {
+    throw data['message'];
+  }
+}
+
 
   static Future<CustomerWallet> getWallet(
     String email,
@@ -157,21 +190,51 @@ class ApiService {
 
   static Future<void> updateWallet(
     String email,
-    double balance,
-  ) async {
+    double balance, {
+    String? cardNumber,
+    String? cardHolder,
+    String? expiryDate,
+    String? cvv,
+  }) async {
+    final body = {
+      "email": email,
+      "balance": balance,
+    };
+
+    // Add card details if provided
+    if (cardNumber != null) body["card_number"] = cardNumber;
+    if (cardHolder != null) body["card_holder"] = cardHolder;
+    if (expiryDate != null) body["expiry_date"] = expiryDate;
+    if (cvv != null) body["cvv"] = cvv;
+
     final response = await http.post(
       Uri.parse("$baseUrl/update_wallet.php"),
       headers: headers,
-      body: jsonEncode({
-        "email": email,
-        "balance": balance,
-      }),
+      body: jsonEncode(body),
     );
 
     final data = jsonDecode(response.body);
 
     if (data['status'] != true) {
       throw Exception(data['message']);
+    }
+  }
+
+  /// Refund money to wallet
+  static Future<void> refundToWallet(String email, double amount) async {
+    final response = await http.post(
+      Uri.parse("$baseUrl/refund_wallet.php"),
+      headers: headers,
+      body: jsonEncode({
+        "email": email,
+        "amount": amount,
+      }),
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (data['status'] != true) {
+      throw Exception(data['message'] ?? "Failed to refund");
     }
   }
 
